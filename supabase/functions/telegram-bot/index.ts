@@ -12,9 +12,10 @@
 //  7. Response cleanup: удаление мета-текста, markdown, AI-маркеров
 // ============================================================
 
-import { Bot, webhookCallback, Keyboard } from "https://deno.land/x/grammy@v1.43.0/mod.ts";
+import { Bot, webhookCallback, Keyboard, InputFile } from "https://deno.land/x/grammy@v1.43.0/mod.ts";
 import { GoogleGenAI } from "npm:@google/genai";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import JSZip from "npm:jszip";
 
 // ========================
 // CONFIG
@@ -203,6 +204,11 @@ async function clearHistoryByChatAndOwner(chatId: number, ownerId: number): Prom
         const ids = connections.map((c: { connection_id: string }) => c.connection_id);
         await supabase.from("messages").delete().eq("chat_id", chatId).in("connection_id", ids);
     }
+}
+
+// --- Avatars ---
+async function addAvatar(ownerId: number, storagePath: string): Promise<void> {
+    await supabase.from("user_avatars").insert({ owner_id: ownerId, storage_path: storagePath });
 }
 
 // --- Settings ---
@@ -721,6 +727,7 @@ const bot = new Bot(BOT_TOKEN);
 const mainKb = new Keyboard()
     .text("⚙️ Изменить промпт").row()
     .text("🧠 Обучить на истории").row()
+    .text("🖼 Аватарки (.zip)").text("🔄 Тест аватара").row()
     .text("🧹 Очистить чат клиента").text("🗑 Очистить всю историю").row()
     .text("🖼 Мои стикеры").text("❌ Очистить стикеры").row()
     .text("⏸ Кулдаун").row()
@@ -1145,8 +1152,53 @@ bot.on("message:document", async (ctx) => {
     const ownerId = ctx.from?.id || 0;
     const doc = ctx.message.document;
 
+    if (doc.file_name?.endsWith(".zip")) {
+        const waitMsg = await ctx.reply("⏳ Загружаю и распаковываю архив...");
+        try {
+            const fileInfo = await ctx.api.getFile(doc.file_id);
+            if (!fileInfo.file_path) throw new Error("Нет пути к файлу");
+            const url = `https://api.telegram.org/file/bot${BOT_TOKEN}/${fileInfo.file_path}`;
+            const response = await fetch(url);
+            const arrayBuffer = await response.arrayBuffer();
+            
+            const zip = await JSZip.loadAsync(arrayBuffer);
+            let savedCount = 0;
+            
+            for (const [filename, fileData] of Object.entries(zip.files)) {
+                if (fileData.dir) continue;
+                const lower = filename.toLowerCase();
+                if (!lower.endsWith(".jpg") && !lower.endsWith(".jpeg") && !lower.endsWith(".png")) continue;
+                
+                const content = await fileData.async("uint8array");
+                // Убираем слеши из пути чтобы не было проблем со Storage
+                const safeName = filename.replace(/\//g, "_");
+                const path = `${ownerId}/${Date.now()}_${safeName}`;
+                
+                const { error: storageErr } = await supabase.storage.from("avatars").upload(path, content, {
+                    contentType: lower.endsWith(".png") ? "image/png" : "image/jpeg",
+                    upsert: true
+                });
+                
+                if (!storageErr) {
+                    await addAvatar(ownerId, path);
+                    savedCount++;
+                }
+            }
+            
+            await ctx.api.editMessageText(
+                ctx.chat.id,
+                waitMsg.message_id,
+                `✅ Из архива извлечено и сохранено аватарок: ${savedCount}.\nКрон-скрипт будет менять их каждые 4 часа!`
+            );
+        } catch (e) {
+            console.error("[ZIP ERROR]", e);
+            await ctx.api.editMessageText(ctx.chat.id, waitMsg.message_id, "❌ Ошибка при обработке .zip архива.");
+        }
+        return;
+    }
+
     if (!doc.file_name?.endsWith(".json") && !doc.file_name?.endsWith(".txt")) {
-        await ctx.reply("Пожалуйста, отправьте файл в формате .json (Telegram Export) или .txt.");
+        await ctx.reply("Пожалуйста, отправьте файл в формате .json (Telegram Export), .txt или .zip (для аватарок).");
         return;
     }
 
@@ -1188,6 +1240,88 @@ bot.on("message:document", async (ctx) => {
     } catch (e) {
         console.error("[ANALYZE]", e);
         await ctx.api.editMessageText(ctx.chat.id, waitMsg.message_id, "❌ Произошла ошибка при анализе файла.");
+    }
+});
+
+// --- Аватарки ---
+bot.hears("🖼 Аватарки (.zip)", async (ctx) => {
+    const ownerId = ctx.from?.id || 0;
+    await setSessionStep(ownerId, "idle");
+    await ctx.reply(
+        "Отправьте мне файл `.zip` с фотографиями (JPG/PNG). Я сохраню их в базу и крон-скрипт будет менять фото вашего профиля каждые 3-4 часа!"
+    );
+});
+
+bot.hears("🔄 Тест аватара", async (ctx) => {
+    const ownerId = ctx.from?.id || 0;
+    const waitMsg = await ctx.reply("⏳ Ищу аватарку и пытаюсь её установить...");
+    
+    try {
+        let { data: avatars } = await supabase
+            .from("user_avatars")
+            .select("*")
+            .eq("owner_id", ownerId)
+            .eq("is_used", false)
+            .order("id", { ascending: true })
+            .limit(1);
+
+        if (!avatars || avatars.length === 0) {
+            await supabase.from("user_avatars").update({ is_used: false }).eq("owner_id", ownerId);
+            const resetRes = await supabase
+                .from("user_avatars")
+                .select("*")
+                .eq("owner_id", ownerId)
+                .eq("is_used", false)
+                .order("id", { ascending: true })
+                .limit(1);
+            avatars = resetRes.data;
+        }
+
+        if (!avatars || avatars.length === 0) {
+            await ctx.api.editMessageText(ctx.chat.id, waitMsg.message_id, "❌ У вас нет загруженных аватарок. Загрузите .zip архив!");
+            return;
+        }
+
+        const avatar = avatars[0];
+
+        const { data: connections } = await supabase
+            .from("connections")
+            .select("connection_id")
+            .eq("owner_id", ownerId)
+            .limit(1);
+
+        if (!connections || connections.length === 0) {
+            await ctx.api.editMessageText(ctx.chat.id, waitMsg.message_id, "❌ Нет активного подключения к Telegram Business. Сначала подключите бота в настройках!");
+            return;
+        }
+
+        const connectionId = connections[0].connection_id;
+
+        const { data: fileData, error: downloadErr } = await supabase.storage.from("avatars").download(avatar.storage_path);
+        if (downloadErr || !fileData) {
+            await ctx.api.editMessageText(ctx.chat.id, waitMsg.message_id, "❌ Ошибка скачивания фото из базы (Storage).");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append("business_connection_id", connectionId);
+        formData.append("photo", fileData, "avatar.jpg");
+
+        const tgRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/setBusinessAccountProfilePhoto`, {
+            method: "POST",
+            body: formData
+        });
+
+        const tgJson = await tgRes.json();
+        if (tgJson.ok) {
+            await supabase.from("user_avatars").update({ is_used: true }).eq("id", avatar.id);
+            await ctx.api.editMessageText(ctx.chat.id, waitMsg.message_id, "✅ Фото профиля успешно обновлено (Тест)!");
+        } else {
+            await ctx.api.editMessageText(ctx.chat.id, waitMsg.message_id, `❌ Ошибка Telegram API: ${JSON.stringify(tgJson)}`);
+        }
+    } catch (e) {
+        console.error("[TEST AVATAR]", e);
+        await ctx.api.editMessageText(ctx.chat.id, waitMsg.message_id, "❌ Произошла внутренняя ошибка при тестировании.");
     }
 });
 
