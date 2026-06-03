@@ -1,92 +1,193 @@
-# 🤖 Telegram Business Bot
+Welcome to your new TanStack Start app! 
 
-Автоответчик для Telegram Business аккаунта на базе **Gemini 2.5 Flash Lite**.
+# Getting Started
 
-## Возможности
-
-- 🧠 **Gemini AI** — генерация ответов с поддержкой фото, видео, аудио, голосовых
-- 🎭 **Имитация человека** — прочитано (✅✅), "печатает...", "слушает аудио", опечатки
-- 🖼 **Умные стикеры** — Gemini выбирает подходящий стикер по контексту (не рандом!)
-- ⏸ **Кулдаун** — если вы ответили клиенту, бот молчит 8 минут
-- ⚙️ **Настраиваемый промпт** — задайте как бот должен общаться
-- 🧠 **Обучение на истории** — загрузите переписку и бот скопирует ваш стиль
-- 🔒 **Защита от зацикливания** — бот не отвечает на свои сообщения
-- 🛡️ **Prompt injection защита** — фильтрация попыток взлома промпта
-
-## Стек
-
-- **Runtime:** Deno (Supabase Edge Functions)
-- **Bot Framework:** grammY v1.43
-- **AI:** Google Gemini 2.5 Flash Lite
-- **Database:** PostgreSQL (Supabase)
-- **Deploy:** Supabase + Webhook
-
-## Быстрый старт
-
-### 1. Создайте проект в Supabase
-
-1. [app.supabase.com](https://app.supabase.com) → New Project
-2. Запишите **Project URL**, **Service Role Key**, **Project Ref**
-
-### 2. Создайте таблицы
-
-1. SQL Editor → вставьте содержимое `supabase/migrations/001_initial_schema.sql` → Run
-
-### 3. Установите секреты
+To run this application:
 
 ```bash
-supabase login
-supabase link --project-ref ВАШ_PROJECT_REF
-
-supabase secrets set BOT_TOKEN="токен_от_BotFather"
-supabase secrets set GEMINI_API_KEY="ключ_из_aistudio"
-supabase secrets set SUPABASE_URL="https://ваш-проект.supabase.co"
-supabase secrets set SUPABASE_SERVICE_ROLE_KEY="ваш_service_role_ключ"
-supabase secrets set SYSTEM_PROMPT="Ты обычный человек, общаешься в Telegram..."
+npm install
+npm run dev
 ```
 
-### 4. Задеплойте Edge Function
+# Building For Production
+
+To build this application for production:
 
 ```bash
-supabase functions deploy telegram-bot --no-verify-jwt
+npm run build
 ```
 
-### 5. Установите Webhook
+## Testing
+
+This project uses [Vitest](https://vitest.dev/) for testing. You can run the tests with:
 
 ```bash
-curl "https://api.telegram.org/botВАШ_BOT_TOKEN/setWebhook?url=https://ВАШ_PROJECT_REF.supabase.co/functions/v1/telegram-bot"
+npm run test
 ```
 
-### 6. Подключите Telegram Business
+## Styling
 
-1. Telegram → Настройки → Telegram Business
-2. Подключите вашего бота как бизнес-бота
+This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.
 
-## Управление ботом
+### Removing Tailwind CSS
 
-Отправьте `/start` вашему боту в личке. Доступные функции:
+If you prefer not to use Tailwind CSS:
 
-| Кнопка | Действие |
-|--------|----------|
-| ⚙️ Изменить промпт | Задать новый системный промпт |
-| 🧠 Обучить на истории | Загрузить JSON-экспорт переписки |
-| 🖼 Мои стикеры | Посмотреть количество стикеров |
-| ❌ Очистить стикеры | Удалить все стикеры |
-| 🧹 Очистить чат клиента | Очистить историю конкретного чата |
-| 🗑 Очистить всю историю | Очистить всю историю |
-| ⏸ Кулдаун | Вкл/выкл кулдаун (8 мин) |
+1. Remove the demo pages in `src/routes/demo/`
+2. Replace the Tailwind import in `src/styles.css` with your own styles
+3. Remove `tailwindcss()` from the plugins array in `vite.config.ts`
+4. Uninstall the packages: `npm install @tailwindcss/vite tailwindcss -D`
 
-**Добавление стикеров:** просто отправьте любой стикер боту — он загрузит весь стикерпак.
 
-## Защита от багов
 
-| Проблема | Решение |
-|----------|---------|
-| Бот отвечает сам себе (зацикливание) | `message.from.is_bot` → пропуск |
-| Двойная обработка в serverless | Таблица `processed_messages` с уникальным ключом |
-| Бот отвечает когда вы сами пишете | Кулдаун 8 минут после вашего сообщения |
-| Потеря connection_id | Self-healing: автовосстановление связи |
-| Gemini упал | Fallback: "Ой, что-то со связью..." |
-| Файл не скачался | Продолжает без медиа |
-| Стикер не отправился | Молча пропускает |
-| Webhook timeout | Всегда возвращает 200 OK |
+## Routing
+
+This project uses [TanStack Router](https://tanstack.com/router) with file-based routing. Routes are managed as files in `src/routes`.
+
+### Adding A Route
+
+To add a new route to your application just add a new file in the `./src/routes` directory.
+
+TanStack will automatically generate the content of the route file for you.
+
+Now that you have two routes you can use a `Link` component to navigate between them.
+
+### Adding Links
+
+To use SPA (Single Page Application) navigation you will need to import the `Link` component from `@tanstack/react-router`.
+
+```tsx
+import { Link } from "@tanstack/react-router";
+```
+
+Then anywhere in your JSX you can use it like so:
+
+```tsx
+<Link to="/about">About</Link>
+```
+
+This will create a link that will navigate to the `/about` route.
+
+More information on the `Link` component can be found in the [Link documentation](https://tanstack.com/router/v1/docs/framework/react/api/router/linkComponent).
+
+### Using A Layout
+
+In the File Based Routing setup the layout is located in `src/routes/__root.tsx`. Anything you add to the root route will appear in all the routes. The route content will appear in the JSX where you render `{children}` in the `shellComponent`.
+
+Here is an example layout that includes a header:
+
+```tsx
+import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
+
+export const Route = createRootRoute({
+  head: () => ({
+    meta: [
+      { charSet: 'utf-8' },
+      { name: 'viewport', content: 'width=device-width, initial-scale=1' },
+      { title: 'My App' },
+    ],
+  }),
+  shellComponent: ({ children }) => (
+    <html lang="en">
+      <head>
+        <HeadContent />
+      </head>
+      <body>
+        <header>
+          <nav>
+            <Link to="/">Home</Link>
+            <Link to="/about">About</Link>
+          </nav>
+        </header>
+        {children}
+        <Scripts />
+      </body>
+    </html>
+  ),
+})
+```
+
+More information on layouts can be found in the [Layouts documentation](https://tanstack.com/router/latest/docs/framework/react/guide/routing-concepts#layouts).
+
+## Server Functions
+
+TanStack Start provides server functions that allow you to write server-side code that seamlessly integrates with your client components.
+
+```tsx
+import { createServerFn } from '@tanstack/react-start'
+
+const getServerTime = createServerFn({
+  method: 'GET',
+}).handler(async () => {
+  return new Date().toISOString()
+})
+
+// Use in a component
+function MyComponent() {
+  const [time, setTime] = useState('')
+  
+  useEffect(() => {
+    getServerTime().then(setTime)
+  }, [])
+  
+  return <div>Server time: {time}</div>
+}
+```
+
+## API Routes
+
+You can create API routes by using the `server` property in your route definitions:
+
+```tsx
+import { createFileRoute } from '@tanstack/react-router'
+import { json } from '@tanstack/react-start'
+
+export const Route = createFileRoute('/api/hello')({
+  server: {
+    handlers: {
+      GET: () => json({ message: 'Hello, World!' }),
+    },
+  },
+})
+```
+
+## Data Fetching
+
+There are multiple ways to fetch data in your application. You can use TanStack Query to fetch data from a server. But you can also use the `loader` functionality built into TanStack Router to load the data for a route before it's rendered.
+
+For example:
+
+```tsx
+import { createFileRoute } from '@tanstack/react-router'
+
+export const Route = createFileRoute('/people')({
+  loader: async () => {
+    const response = await fetch('https://swapi.dev/api/people')
+    return response.json()
+  },
+  component: PeopleComponent,
+})
+
+function PeopleComponent() {
+  const data = Route.useLoaderData()
+  return (
+    <ul>
+      {data.results.map((person) => (
+        <li key={person.name}>{person.name}</li>
+      ))}
+    </ul>
+  )
+}
+```
+
+Loaders simplify your data fetching logic dramatically. Check out more information in the [Loader documentation](https://tanstack.com/router/latest/docs/framework/react/guide/data-loading#loader-parameters).
+
+# Demo files
+
+Files prefixed with `demo` can be safely deleted. They are there to provide a starting point for you to play around with the features you've installed.
+
+# Learn More
+
+You can learn more about all of the offerings from TanStack in the [TanStack documentation](https://tanstack.com).
+
+For TanStack Start specific documentation, visit [TanStack Start](https://tanstack.com/start).
